@@ -1,0 +1,26 @@
+{
+  "name": "osrs-party-finder-relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ws": "^8.20.0",
+    "@supabase/supabase-js": "^2.101.1",
+    "pg": "^8.20.0",
+    "dotenv": "^17.4.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "@types/pg": "^8.15.0",
+    "typescript": "^5.8.0",
+    "tsx": "^4.21.0",
+    "vitest": "^3.1.1"
+  }
+}
