@@ -1,5 +1,5 @@
-app = "osrs-party-finder-relay"
-primary_region = "fra"
+app = "potion-storage-relay"
+primary_region = "ams"
 
 [build]
 
