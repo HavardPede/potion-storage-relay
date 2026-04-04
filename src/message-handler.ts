@@ -2,6 +2,7 @@ import type { WebSocket } from "ws"
 import { parseInbound, type OutboundMessage } from "./types.js"
 import { registry } from "./registry.js"
 import { writePresenceOnline, writePresenceOffline } from "./presence.js"
+import { displaceAndRegisterRsn } from "./rsn.js"
 import { pool } from "./db.js"
 
 const sendJson = (ws: WebSocket, message: OutboundMessage): void => {
@@ -9,7 +10,9 @@ const sendJson = (ws: WebSocket, message: OutboundMessage): void => {
 }
 
 const handleIdentify = async (ws: WebSocket, userId: string, rsn: string): Promise<void> => {
+  console.log(`[identify] userId=${userId}, rsn=${rsn}`)
   registry.updateRsn(ws, rsn)
+  await displaceAndRegisterRsn(userId, rsn)
   await writePresenceOnline(userId, rsn)
 
   const pending = await pool.query(

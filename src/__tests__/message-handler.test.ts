@@ -3,6 +3,7 @@ import { handleMessage } from "../message-handler.js"
 import { registry } from "../registry.js"
 import { pool } from "../db.js"
 import { writePresenceOnline, writePresenceOffline } from "../presence.js"
+import { displaceAndRegisterRsn } from "../rsn.js"
 
 vi.mock("../db.js", () => ({
   pool: { query: vi.fn() },
@@ -20,11 +21,16 @@ vi.mock("../presence.js", () => ({
   writePresenceOffline: vi.fn(),
 }))
 
+vi.mock("../rsn.js", () => ({
+  displaceAndRegisterRsn: vi.fn(),
+}))
+
 const mockQuery = vi.mocked(pool.query)
 const mockUpdateRsn = vi.mocked(registry.updateRsn)
 const mockGetConnectionByWs = vi.mocked(registry.getConnectionByWs)
 const mockWritePresenceOnline = vi.mocked(writePresenceOnline)
 const mockWritePresenceOffline = vi.mocked(writePresenceOffline)
+const mockDisplaceAndRegisterRsn = vi.mocked(displaceAndRegisterRsn)
 
 const createMockWs = (): WebSocket =>
   ({ send: vi.fn(), close: vi.fn() }) as unknown as WebSocket
@@ -34,6 +40,7 @@ beforeEach(() => {
   mockQuery.mockResolvedValue({ rows: [] } as never)
   mockWritePresenceOnline.mockResolvedValue(undefined)
   mockWritePresenceOffline.mockResolvedValue(undefined)
+  mockDisplaceAndRegisterRsn.mockResolvedValue(undefined)
 })
 
 describe("handleMessage", () => {
