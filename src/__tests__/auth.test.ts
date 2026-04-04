@@ -1,19 +1,105 @@
 import { createHash } from "crypto"
-import { validateToken } from "../auth.js"
+import { validateToken, issueTokenFromPairingCode } from "../auth.js"
 import { pool } from "../db.js"
 
+const mockClient = {
+  query: vi.fn(),
+  release: vi.fn(),
+}
+
 vi.mock("../db.js", () => ({
-  pool: { query: vi.fn() },
+  pool: {
+    query: vi.fn(),
+    connect: vi.fn(),
+  },
 }))
 
 const mockQuery = vi.mocked(pool.query)
+const mockConnect = vi.mocked(pool.connect)
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockConnect.mockResolvedValue(mockClient as never)
+  mockClient.query.mockResolvedValue({ rows: [] })
 })
 
 const hashToken = (plaintext: string): string =>
   createHash("sha256").update(plaintext).digest("hex")
+
+describe("issueTokenFromPairingCode", () => {
+  it("returns userId and token for a valid pairing code", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: "code-1", userId: "user-1" }] }) // SELECT PairingCode
+      .mockResolvedValueOnce({ rows: [] }) // INSERT PluginToken
+      .mockResolvedValueOnce({ rows: [] }) // UPDATE PairingCode
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+
+    const result = await issueTokenFromPairingCode("ABCD-1234")
+
+    expect(result).not.toBeNull()
+    expect(result?.userId).toBe("user-1")
+    expect(typeof result?.token).toBe("string")
+    expect(result?.token).toHaveLength(64) // 32 bytes hex
+  })
+
+  it("returns null for an unknown code", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [] }) // SELECT PairingCode — not found
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+
+    const result = await issueTokenFromPairingCode("XXXX-0000")
+
+    expect(result).toBeNull()
+  })
+
+  it("returns null for an already-used code", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [] }) // SELECT PairingCode — usedAt IS NULL filters it out
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+
+    const result = await issueTokenFromPairingCode("USED-1234")
+
+    expect(result).toBeNull()
+  })
+
+  it("returns null for an expired code", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [] }) // SELECT PairingCode — expiresAt > NOW() filters it out
+      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+
+    const result = await issueTokenFromPairingCode("EXPR-5678")
+
+    expect(result).toBeNull()
+  })
+
+  it("rolls back and rethrows on DB error", async () => {
+    const dbError = new Error("connection lost")
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockRejectedValueOnce(dbError) // SELECT PairingCode throws
+
+    await expect(issueTokenFromPairingCode("ABCD-1234")).rejects.toThrow("connection lost")
+    expect(mockClient.query).toHaveBeenCalledWith("ROLLBACK")
+    expect(mockClient.release).toHaveBeenCalled()
+  })
+
+  it("releases the client after success", async () => {
+    mockClient.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: "code-1", userId: "user-1" }] }) // SELECT
+      .mockResolvedValueOnce({ rows: [] }) // INSERT
+      .mockResolvedValueOnce({ rows: [] }) // UPDATE
+      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+
+    await issueTokenFromPairingCode("ABCD-1234")
+
+    expect(mockClient.release).toHaveBeenCalled()
+  })
+})
 
 describe("validateToken", () => {
   it("returns userId for valid token", async () => {

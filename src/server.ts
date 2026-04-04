@@ -1,7 +1,7 @@
 import "dotenv/config"
 import http from "http"
 import { WebSocketServer } from "ws"
-import { validateToken } from "./auth.js"
+import { validateToken, issueTokenFromPairingCode } from "./auth.js"
 import { registry } from "./registry.js"
 import { handleMessage } from "./message-handler.js"
 import { writePresenceOffline } from "./presence.js"
@@ -31,14 +31,45 @@ wss.on("connection", (ws) => {
     if (!authenticated) ws.close(1008, "Auth timeout")
   }, AUTH_TIMEOUT_MS)
 
+  const activateSession = (resolvedUserId: string): void => {
+    authenticated = true
+    userId = resolvedUserId
+    registry.add(userId, ws)
+    ws.on("message", (d) => {
+      handleMessage(ws, userId!, d.toString()).catch((err: unknown) => {
+        console.error("[ws] message handler error:", err)
+      })
+    })
+  }
+
   ws.once("message", async (data) => {
     clearTimeout(timeout)
     const raw = data.toString()
     const msg = parseInbound(raw)
 
-    if (!msg || msg.type !== "AUTH") {
-      ws.send(JSON.stringify({ type: "AUTH_ERROR", reason: "First message must be AUTH" }))
+    if (!msg || (msg.type !== "AUTH" && msg.type !== "PAIR")) {
+      ws.send(JSON.stringify({ type: "AUTH_ERROR", reason: "First message must be AUTH or PAIR" }))
       ws.close(1008, "Auth required")
+      return
+    }
+
+    if (msg.type === "PAIR") {
+      try {
+        const result = await issueTokenFromPairingCode(msg.code)
+        if (!result) {
+          console.log("[pair] failed: invalid or expired code")
+          ws.send(JSON.stringify({ type: "PAIR_ERROR", reason: "Invalid or expired code" }))
+          ws.close(1008, "Invalid pairing code")
+          return
+        }
+        activateSession(result.userId)
+        ws.send(JSON.stringify({ type: "PAIR_OK", token: result.token }))
+        console.log(`[pair] success: userId=${result.userId}, connections=${registry.size()}`)
+      } catch (err) {
+        console.error("[pair] error:", err)
+        ws.send(JSON.stringify({ type: "PAIR_ERROR", reason: "Internal error" }))
+        ws.close(1011, "Internal error")
+      }
       return
     }
 
@@ -49,17 +80,9 @@ wss.on("connection", (ws) => {
       return
     }
 
-    authenticated = true
-    userId = validatedUserId
-    registry.add(userId, ws)
+    activateSession(validatedUserId)
     ws.send(JSON.stringify({ type: "AUTH_OK" }))
-    console.log(`[ws] authenticated: userId=${userId}, connections=${registry.size()}`)
-
-    ws.on("message", (d) => {
-      handleMessage(ws, userId!, d.toString()).catch((err: unknown) => {
-        console.error("[ws] message handler error:", err)
-      })
-    })
+    console.log(`[ws] authenticated: userId=${validatedUserId}, connections=${registry.size()}`)
   })
 
   ws.on("close", () => {
