@@ -14,13 +14,13 @@
 
 ```
 Web app (Next.js)
-  └── writes PluginCommand rows to Supabase
-        └── Supabase Realtime notifies relay
-              └── relay pushes COMMAND to connected plugin client
+  └── inserts PluginCommand row into PostgreSQL
+        └── NOTIFY trigger broadcasts row to "plugin_command" channel
+              └── relay receives via LISTEN, pushes COMMAND to connected plugin client
                     └── RuneLite plugin calls PartyService.changeParty(passphrase)
 ```
 
-The plugin connects over WebSocket, authenticates with a plugin token, and maintains a persistent connection. The relay holds that connection and forwards commands as they arrive.
+The plugin connects over WebSocket, authenticates with a plugin token, and maintains a persistent connection. The relay listens for PostgreSQL `NOTIFY` events on the `plugin_command` channel and forwards commands as they arrive. The trigger is managed by a Prisma migration in the web app repository.
 
 The message protocol is defined in the [plugin repository](https://github.com/HavardPede/link).
 
