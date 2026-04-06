@@ -29,8 +29,15 @@ export const startListener = (): void => {
         }
 
         const serialized = JSON.stringify(message)
+        console.log(
+          `[command] routing: userId=${userId}, rsn=${rsn}, targets=${connections.length}, commandId=${message.id}`
+        )
         for (const ws of connections) {
-          ws.send(serialized)
+          try {
+            ws.send(serialized)
+          } catch (err) {
+            console.error("[command] send failed:", err)
+          }
         }
       }
     )

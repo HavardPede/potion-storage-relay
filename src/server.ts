@@ -1,6 +1,6 @@
 import "dotenv/config"
 import http from "http"
-import { WebSocketServer } from "ws"
+import { WebSocketServer, type WebSocket } from "ws"
 import { validateToken, issueTokenFromPairingCode } from "./auth.js"
 import { registry } from "./registry.js"
 import { handleMessage } from "./message-handler.js"
@@ -10,6 +10,7 @@ import { parseInbound } from "./types.js"
 
 const PORT = parseInt(process.env.PORT ?? "8080", 10)
 const AUTH_TIMEOUT_MS = 5_000
+const PING_INTERVAL_MS = 30_000
 
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
@@ -23,7 +24,25 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server })
 
+const aliveSet = new WeakSet<WebSocket>()
+
+const pingInterval = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!aliveSet.has(ws)) {
+      ws.terminate()
+      continue
+    }
+    aliveSet.delete(ws)
+    ws.ping()
+  }
+}, PING_INTERVAL_MS)
+
+wss.on("close", () => clearInterval(pingInterval))
+
 wss.on("connection", (ws) => {
+  aliveSet.add(ws)
+  ws.on("pong", () => aliveSet.add(ws))
+
   let authenticated = false
   let userId: string | null = null
 

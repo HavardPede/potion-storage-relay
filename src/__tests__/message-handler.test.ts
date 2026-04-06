@@ -95,7 +95,7 @@ describe("handleMessage", () => {
   })
 
   describe("PARTY_STATE", () => {
-    it("deletes PartyMember on LEFT", async () => {
+    it("deletes PartyMember scoped to OPEN parties on LEFT", async () => {
       const ws = createMockWs()
       await handleMessage(
         ws,
@@ -105,6 +105,34 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "PartyMember"'),
+        ["user-1"]
+      )
+    })
+
+    it("updates application status to WITHDRAWN on LEFT", async () => {
+      const ws = createMockWs()
+      await handleMessage(
+        ws,
+        "user-1",
+        JSON.stringify({ type: "PARTY_STATE", state: "LEFT", passphrase: null })
+      )
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining(`UPDATE "Application"`),
+        ["user-1"]
+      )
+    })
+
+    it("does not affect STARTED parties on LEFT", async () => {
+      const ws = createMockWs()
+      await handleMessage(
+        ws,
+        "user-1",
+        JSON.stringify({ type: "PARTY_STATE", state: "LEFT", passphrase: null })
+      )
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.not.stringContaining("'STARTED'"),
         ["user-1"]
       )
     })
