@@ -1,14 +1,14 @@
 import { createHash } from "crypto"
 import type { PoolClient, QueryResult } from "pg"
-import { validateToken, issueTokenFromPairingCode } from "./auth.js"
-import { pool } from "./db.js"
+import { validateToken, issueTokenFromPairingCode } from "../auth.js"
+import { pool } from "../db.js"
 
 const mockClient = {
   query: vi.fn(),
   release: vi.fn(),
 }
 
-vi.mock("./db.js", () => ({
+vi.mock("../db.js", () => ({
   pool: {
     query: vi.fn(),
     connect: vi.fn(),

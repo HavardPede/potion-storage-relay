@@ -1,33 +1,33 @@
 import type { WebSocket } from "ws"
 import type { QueryResult } from "pg"
-import { handleMessage } from "./message-handler.js"
-import { registry } from "./registry.js"
-import { pool } from "./db.js"
-import { writePresenceOnline, writePresenceOffline } from "./presence.js"
-import { displaceAndRegisterRsn } from "./rsn.js"
+import { handleMessage } from "../message-handler.js"
+import { registry } from "../registry.js"
+import { pool } from "../db.js"
+import { writePresenceOnline, writePresenceOffline } from "../presence.js"
+import { displaceAndRegisterRsn } from "../rsn.js"
 import {
   PARTY_STATUS_OPEN,
   APPLICATION_STATUS_ACCEPTED,
   APPLICATION_STATUS_WITHDRAWN,
-} from "./db-enums.js"
+} from "../db-enums.js"
 
-vi.mock("./db.js", () => ({
+vi.mock("../db.js", () => ({
   pool: { query: vi.fn() },
 }))
 
-vi.mock("./registry.js", () => ({
+vi.mock("../registry.js", () => ({
   registry: {
     updateRsn: vi.fn(),
     getConnectionByWs: vi.fn(),
   },
 }))
 
-vi.mock("./presence.js", () => ({
+vi.mock("../presence.js", () => ({
   writePresenceOnline: vi.fn(),
   writePresenceOffline: vi.fn(),
 }))
 
-vi.mock("./rsn.js", () => ({
+vi.mock("../rsn.js", () => ({
   displaceAndRegisterRsn: vi.fn(),
 }))
 
