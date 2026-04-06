@@ -3,24 +3,37 @@ import { registry } from "./registry.js"
 import type { OutboundMessage } from "./types.js"
 
 const RECONNECT_DELAY_MS = 5_000
+const PG_NOTIFY_CHANNEL = "plugin_command"
 
-const routeCommand = (row: Record<string, unknown>): void => {
-  const userId = row.userId as string
-  const rsn = (row.rsn as string) ?? null
-  const connections = registry.getByUserAndRsn(userId, rsn)
+interface CommandNotificationPayload {
+  readonly id: string
+  readonly userId: string
+  readonly type: "JOIN_PARTY" | "LEAVE_PARTY"
+  readonly passphrase: string | null
+  readonly partyId: string | null
+  readonly reason: string | null
+  readonly rsn: string | null
+}
 
+const isCommandPayload = (value: unknown): value is CommandNotificationPayload => {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false
+  const v = value as Record<string, unknown>
+  return typeof v.id === "string" && typeof v.userId === "string"
+}
+
+const routeCommand = (payload: CommandNotificationPayload): void => {
+  const connections = registry.getByUserAndRsn(payload.userId, payload.rsn)
   const message: OutboundMessage = {
     type: "COMMAND",
-    id: row.id as string,
-    command: row.type as "JOIN_PARTY" | "LEAVE_PARTY",
-    passphrase: (row.passphrase as string) ?? null,
-    partyId: (row.partyId as string) ?? null,
-    reason: (row.reason as string) ?? null,
+    id: payload.id,
+    command: payload.type,
+    passphrase: payload.passphrase,
+    partyId: payload.partyId,
+    reason: payload.reason,
   }
-
   const serialized = JSON.stringify(message)
   console.log(
-    `[command] routing: userId=${userId}, rsn=${rsn}, targets=${connections.length}, commandId=${message.id}`
+    `[command] routing: userId=${payload.userId}, rsn=${payload.rsn}, targets=${connections.length}, commandId=${message.id}`
   )
   for (const ws of connections) {
     try {
@@ -40,18 +53,22 @@ const listen = async (): Promise<void> => {
   })
 
   client.on("notification", (msg) => {
-    if (msg.channel !== "plugin_command" || !msg.payload) return
+    if (msg.channel !== PG_NOTIFY_CHANNEL || !msg.payload) return
     try {
-      const row = JSON.parse(msg.payload) as Record<string, unknown>
-      routeCommand(row)
+      const parsed: unknown = JSON.parse(msg.payload)
+      if (!isCommandPayload(parsed)) {
+        console.error("[pg-listen] invalid notification payload:", parsed)
+        return
+      }
+      routeCommand(parsed)
     } catch (err) {
       console.error("[pg-listen] failed to parse notification:", err)
     }
   })
 
   await client.connect()
-  await client.query("LISTEN plugin_command")
-  console.log("[pg-listen] listening for plugin_command notifications")
+  await client.query(`LISTEN ${PG_NOTIFY_CHANNEL}`)
+  console.log(`[pg-listen] listening for ${PG_NOTIFY_CHANNEL} notifications`)
 }
 
 const scheduleReconnect = (): void => {

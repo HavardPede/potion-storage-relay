@@ -1,4 +1,4 @@
-import { parseInbound } from "../types.js"
+import { parseInbound } from "./types.js"
 
 describe("parseInbound", () => {
   it("parses valid AUTH message", () => {

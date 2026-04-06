@@ -1,5 +1,3 @@
-// --- Inbound (plugin -> relay) ---
-
 interface AuthMessage {
   readonly type: "AUTH"
   readonly token: string
@@ -38,8 +36,6 @@ export type InboundMessage =
   | PartyStateMessage
   | PresenceMessage
   | PairMessage
-
-// --- Outbound (relay -> plugin) ---
 
 interface AuthOkMessage {
   readonly type: "AUTH_OK"
@@ -82,66 +78,6 @@ export type OutboundMessage =
   | PairOkMessage
   | PairErrorMessage
 
-// --- Type guards ---
-
-const isString = (value: unknown): value is string =>
-  typeof value === "string"
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
-const INBOUND_TYPES = new Set(["AUTH", "IDENTIFY", "ACK", "PARTY_STATE", "PRESENCE", "PAIR"])
-
-const isValidAuth = (msg: Record<string, unknown>): boolean =>
-  isString(msg.token)
-
-const isValidIdentify = (msg: Record<string, unknown>): boolean =>
-  isString(msg.rsn)
-
-const isValidAck = (msg: Record<string, unknown>): boolean =>
-  isString(msg.commandId)
-
-const isValidPartyState = (msg: Record<string, unknown>): boolean =>
-  (msg.state === "LEFT" || msg.state === "JOINED")
-
-const isValidPresence = (msg: Record<string, unknown>): boolean =>
-  (msg.status === "online" || msg.status === "offline")
-
-const isValidPair = (msg: Record<string, unknown>): boolean =>
-  isString(msg.code)
-
-const FIELD_VALIDATORS: Record<string, (msg: Record<string, unknown>) => boolean> = {
-  AUTH: isValidAuth,
-  IDENTIFY: isValidIdentify,
-  ACK: isValidAck,
-  PARTY_STATE: isValidPartyState,
-  PRESENCE: isValidPresence,
-  PAIR: isValidPair,
-}
-
-const buildInbound = (msg: Record<string, unknown>): InboundMessage | null => {
-  switch (msg.type) {
-    case "AUTH":
-      return { type: "AUTH", token: msg.token as string }
-    case "IDENTIFY":
-      return { type: "IDENTIFY", rsn: msg.rsn as string }
-    case "ACK":
-      return { type: "ACK", commandId: msg.commandId as string }
-    case "PARTY_STATE":
-      return {
-        type: "PARTY_STATE",
-        state: msg.state as "LEFT" | "JOINED",
-        passphrase: (msg.passphrase as string) ?? null,
-      }
-    case "PRESENCE":
-      return { type: "PRESENCE", status: msg.status as "online" | "offline" }
-    case "PAIR":
-      return { type: "PAIR", code: msg.code as string }
-    default:
-      return null
-  }
-}
-
 export const parseInbound = (raw: string): InboundMessage | null => {
   let parsed: unknown
   try {
@@ -152,10 +88,46 @@ export const parseInbound = (raw: string): InboundMessage | null => {
 
   if (!isRecord(parsed)) return null
   if (!isString(parsed.type)) return null
-  if (!INBOUND_TYPES.has(parsed.type)) return null
 
-  const validator = FIELD_VALIDATORS[parsed.type]
-  if (!validator(parsed)) return null
-
-  return buildInbound(parsed)
+  switch (parsed.type) {
+    case "AUTH": return parseAuth(parsed)
+    case "IDENTIFY": return parseIdentify(parsed)
+    case "ACK": return parseAck(parsed)
+    case "PARTY_STATE": return parsePartyState(parsed)
+    case "PRESENCE": return parsePresence(parsed)
+    case "PAIR": return parsePair(parsed)
+    default: return null
+  }
 }
+
+const isString = (value: unknown): value is string =>
+  typeof value === "string"
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const parseAuth = (msg: Record<string, unknown>): AuthMessage | null =>
+  isString(msg.token) ? { type: "AUTH", token: msg.token } : null
+
+const parseIdentify = (msg: Record<string, unknown>): IdentifyMessage | null =>
+  isString(msg.rsn) ? { type: "IDENTIFY", rsn: msg.rsn } : null
+
+const parseAck = (msg: Record<string, unknown>): AckMessage | null =>
+  isString(msg.commandId) ? { type: "ACK", commandId: msg.commandId } : null
+
+const parsePartyState = (msg: Record<string, unknown>): PartyStateMessage | null => {
+  if (msg.state !== "LEFT" && msg.state !== "JOINED") return null
+  return {
+    type: "PARTY_STATE",
+    state: msg.state,
+    passphrase: isString(msg.passphrase) ? msg.passphrase : null,
+  }
+}
+
+const parsePresence = (msg: Record<string, unknown>): PresenceMessage | null => {
+  if (msg.status !== "online" && msg.status !== "offline") return null
+  return { type: "PRESENCE", status: msg.status }
+}
+
+const parsePair = (msg: Record<string, unknown>): PairMessage | null =>
+  isString(msg.code) ? { type: "PAIR", code: msg.code } : null

@@ -1,13 +1,14 @@
 import { createHash } from "crypto"
-import { validateToken, issueTokenFromPairingCode } from "../auth.js"
-import { pool } from "../db.js"
+import type { PoolClient, QueryResult } from "pg"
+import { validateToken, issueTokenFromPairingCode } from "./auth.js"
+import { pool } from "./db.js"
 
 const mockClient = {
   query: vi.fn(),
   release: vi.fn(),
 }
 
-vi.mock("../db.js", () => ({
+vi.mock("./db.js", () => ({
   pool: {
     query: vi.fn(),
     connect: vi.fn(),
@@ -17,10 +18,19 @@ vi.mock("../db.js", () => ({
 const mockQuery = vi.mocked(pool.query)
 const mockConnect = vi.mocked(pool.connect)
 
+const queryResult = <T>(rows: T[]): QueryResult<T> => ({
+  rows,
+  rowCount: rows.length,
+  command: "SELECT",
+  oid: 0,
+  fields: [],
+  rowAsArray: false,
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
-  mockConnect.mockResolvedValue(mockClient as never)
-  mockClient.query.mockResolvedValue({ rows: [] })
+  mockConnect.mockResolvedValue(mockClient as unknown as PoolClient)
+  mockClient.query.mockResolvedValue(queryResult([]))
 })
 
 const hashToken = (plaintext: string): string =>
@@ -29,11 +39,11 @@ const hashToken = (plaintext: string): string =>
 describe("issueTokenFromPairingCode", () => {
   it("returns userId and token for a valid pairing code", async () => {
     mockClient.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ id: "code-1", userId: "user-1" }] }) // SELECT PairingCode
-      .mockResolvedValueOnce({ rows: [] }) // INSERT PluginToken
-      .mockResolvedValueOnce({ rows: [] }) // UPDATE PairingCode
-      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
+      .mockResolvedValueOnce(queryResult([{ id: "code-1", userId: "user-1" }])) // SELECT PairingCode
+      .mockResolvedValueOnce(queryResult([])) // INSERT PluginToken
+      .mockResolvedValueOnce(queryResult([])) // UPDATE PairingCode
+      .mockResolvedValueOnce(queryResult([])) // COMMIT
 
     const result = await issueTokenFromPairingCode("ABCD-1234")
 
@@ -45,9 +55,9 @@ describe("issueTokenFromPairingCode", () => {
 
   it("returns null for an unknown code", async () => {
     mockClient.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [] }) // SELECT PairingCode — not found
-      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
+      .mockResolvedValueOnce(queryResult([])) // SELECT PairingCode — not found
+      .mockResolvedValueOnce(queryResult([])) // ROLLBACK
 
     const result = await issueTokenFromPairingCode("XXXX-0000")
 
@@ -56,9 +66,9 @@ describe("issueTokenFromPairingCode", () => {
 
   it("returns null for an already-used code", async () => {
     mockClient.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [] }) // SELECT PairingCode — usedAt IS NULL filters it out
-      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
+      .mockResolvedValueOnce(queryResult([])) // SELECT PairingCode — usedAt IS NULL filters it out
+      .mockResolvedValueOnce(queryResult([])) // ROLLBACK
 
     const result = await issueTokenFromPairingCode("USED-1234")
 
@@ -67,9 +77,9 @@ describe("issueTokenFromPairingCode", () => {
 
   it("returns null for an expired code", async () => {
     mockClient.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [] }) // SELECT PairingCode — expiresAt > NOW() filters it out
-      .mockResolvedValueOnce({ rows: [] }) // ROLLBACK
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
+      .mockResolvedValueOnce(queryResult([])) // SELECT PairingCode — expiresAt > NOW() filters it out
+      .mockResolvedValueOnce(queryResult([])) // ROLLBACK
 
     const result = await issueTokenFromPairingCode("EXPR-5678")
 
@@ -79,7 +89,7 @@ describe("issueTokenFromPairingCode", () => {
   it("rolls back and rethrows on DB error", async () => {
     const dbError = new Error("connection lost")
     mockClient.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
       .mockRejectedValueOnce(dbError) // SELECT PairingCode throws
 
     await expect(issueTokenFromPairingCode("ABCD-1234")).rejects.toThrow("connection lost")
@@ -89,11 +99,11 @@ describe("issueTokenFromPairingCode", () => {
 
   it("releases the client after success", async () => {
     mockClient.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ id: "code-1", userId: "user-1" }] }) // SELECT
-      .mockResolvedValueOnce({ rows: [] }) // INSERT
-      .mockResolvedValueOnce({ rows: [] }) // UPDATE
-      .mockResolvedValueOnce({ rows: [] }) // COMMIT
+      .mockResolvedValueOnce(queryResult([])) // BEGIN
+      .mockResolvedValueOnce(queryResult([{ id: "code-1", userId: "user-1" }])) // SELECT
+      .mockResolvedValueOnce(queryResult([])) // INSERT
+      .mockResolvedValueOnce(queryResult([])) // UPDATE
+      .mockResolvedValueOnce(queryResult([])) // COMMIT
 
     await issueTokenFromPairingCode("ABCD-1234")
 
@@ -103,7 +113,7 @@ describe("issueTokenFromPairingCode", () => {
 
 describe("validateToken", () => {
   it("returns userId for valid token", async () => {
-    mockQuery.mockResolvedValue({ rows: [{ userId: "user-1" }] } as never)
+    mockQuery.mockResolvedValue(queryResult([{ userId: "user-1" }]))
 
     const result = await validateToken("valid-token")
 
@@ -115,7 +125,7 @@ describe("validateToken", () => {
   })
 
   it("returns null for unknown token", async () => {
-    mockQuery.mockResolvedValue({ rows: [] } as never)
+    mockQuery.mockResolvedValue(queryResult([]))
 
     const result = await validateToken("unknown-token")
 
@@ -123,7 +133,7 @@ describe("validateToken", () => {
   })
 
   it("returns null for revoked token", async () => {
-    mockQuery.mockResolvedValue({ rows: [] } as never)
+    mockQuery.mockResolvedValue(queryResult([]))
 
     const result = await validateToken("revoked-token")
 
@@ -131,7 +141,7 @@ describe("validateToken", () => {
   })
 
   it("hashes the token with sha256 before querying", async () => {
-    mockQuery.mockResolvedValue({ rows: [] } as never)
+    mockQuery.mockResolvedValue(queryResult([]))
 
     await validateToken("test-token")
 

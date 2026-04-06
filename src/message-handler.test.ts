@@ -1,27 +1,33 @@
 import type { WebSocket } from "ws"
-import { handleMessage } from "../message-handler.js"
-import { registry } from "../registry.js"
-import { pool } from "../db.js"
-import { writePresenceOnline, writePresenceOffline } from "../presence.js"
-import { displaceAndRegisterRsn } from "../rsn.js"
+import type { QueryResult } from "pg"
+import { handleMessage } from "./message-handler.js"
+import { registry } from "./registry.js"
+import { pool } from "./db.js"
+import { writePresenceOnline, writePresenceOffline } from "./presence.js"
+import { displaceAndRegisterRsn } from "./rsn.js"
+import {
+  PARTY_STATUS_OPEN,
+  APPLICATION_STATUS_ACCEPTED,
+  APPLICATION_STATUS_WITHDRAWN,
+} from "./db-enums.js"
 
-vi.mock("../db.js", () => ({
+vi.mock("./db.js", () => ({
   pool: { query: vi.fn() },
 }))
 
-vi.mock("../registry.js", () => ({
+vi.mock("./registry.js", () => ({
   registry: {
     updateRsn: vi.fn(),
     getConnectionByWs: vi.fn(),
   },
 }))
 
-vi.mock("../presence.js", () => ({
+vi.mock("./presence.js", () => ({
   writePresenceOnline: vi.fn(),
   writePresenceOffline: vi.fn(),
 }))
 
-vi.mock("../rsn.js", () => ({
+vi.mock("./rsn.js", () => ({
   displaceAndRegisterRsn: vi.fn(),
 }))
 
@@ -32,12 +38,21 @@ const mockWritePresenceOnline = vi.mocked(writePresenceOnline)
 const mockWritePresenceOffline = vi.mocked(writePresenceOffline)
 const mockDisplaceAndRegisterRsn = vi.mocked(displaceAndRegisterRsn)
 
+const queryResult = <T>(rows: T[]): QueryResult<T> => ({
+  rows,
+  rowCount: rows.length,
+  command: "SELECT",
+  oid: 0,
+  fields: [],
+  rowAsArray: false,
+})
+
 const createMockWs = (): WebSocket =>
   ({ send: vi.fn(), close: vi.fn() }) as unknown as WebSocket
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockQuery.mockResolvedValue({ rows: [] } as never)
+  mockQuery.mockResolvedValue(queryResult([]))
   mockWritePresenceOnline.mockResolvedValue(undefined)
   mockWritePresenceOffline.mockResolvedValue(undefined)
   mockDisplaceAndRegisterRsn.mockResolvedValue(undefined)
@@ -61,11 +76,11 @@ describe("handleMessage", () => {
 
     it("re-delivers unacked commands", async () => {
       const ws = createMockWs()
-      mockQuery.mockResolvedValueOnce({
-        rows: [
+      mockQuery.mockResolvedValueOnce(
+        queryResult([
           { id: "cmd-1", type: "JOIN_PARTY", passphrase: "abc", partyId: "p-1", reason: null },
-        ],
-      } as never)
+        ])
+      )
 
       await handleMessage(ws, "user-1", JSON.stringify({ type: "IDENTIFY", rsn: "PlayerOne" }))
 
@@ -105,7 +120,7 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "PartyMember"'),
-        ["user-1"]
+        ["user-1", PARTY_STATUS_OPEN, APPLICATION_STATUS_WITHDRAWN, APPLICATION_STATUS_ACCEPTED]
       )
     })
 
@@ -119,7 +134,7 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining(`UPDATE "Application"`),
-        ["user-1"]
+        ["user-1", PARTY_STATUS_OPEN, APPLICATION_STATUS_WITHDRAWN, APPLICATION_STATUS_ACCEPTED]
       )
     })
 
@@ -133,7 +148,7 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.not.stringContaining("'STARTED'"),
-        ["user-1"]
+        expect.any(Array)
       )
     })
 

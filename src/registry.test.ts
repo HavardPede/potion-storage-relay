@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws"
-import { registry } from "../registry.js"
+import { registry } from "./registry.js"
 
 const createMockWs = (): WebSocket =>
   ({ close: vi.fn(), send: vi.fn() }) as unknown as WebSocket
