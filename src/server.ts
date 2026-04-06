@@ -5,7 +5,7 @@ import { validateToken, issueTokenFromPairingCode } from "./auth.js"
 import { registry } from "./registry.js"
 import { handleMessage } from "./message-handler.js"
 import { writePresenceOffline } from "./presence.js"
-import { startListener } from "./supabase-listener.js"
+import { startCommandListener } from "./command-listener.js"
 import { parseInbound } from "./types.js"
 
 const PORT = parseInt(process.env.PORT ?? "8080", 10)
@@ -121,7 +121,7 @@ wss.on("connection", (ws) => {
   })
 })
 
-startListener()
+startCommandListener()
 
 server.listen(PORT, () => {
   console.log(`[relay] listening on port ${PORT}`)
