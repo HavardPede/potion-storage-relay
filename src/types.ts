@@ -1,3 +1,13 @@
+export enum PartyStatus {
+  Open = "OPEN",
+}
+
+export enum ApplicationStatus {
+  Pending = "PENDING",
+  Accepted = "ACCEPTED",
+  Withdrawn = "WITHDRAWN",
+}
+
 interface AuthMessage {
   readonly type: "AUTH"
   readonly token: string

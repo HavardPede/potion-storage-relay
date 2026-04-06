@@ -5,11 +5,7 @@ import { registry } from "../registry.js"
 import { pool } from "../db.js"
 import { writePresenceOnline, writePresenceOffline } from "../presence.js"
 import { displaceAndRegisterRsn } from "../rsn.js"
-import {
-  PARTY_STATUS_OPEN,
-  APPLICATION_STATUS_ACCEPTED,
-  APPLICATION_STATUS_WITHDRAWN,
-} from "../db-enums.js"
+import { PartyStatus, ApplicationStatus } from "../types.js"
 
 vi.mock("../db.js", () => ({
   pool: { query: vi.fn() },
@@ -120,7 +116,7 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "PartyMember"'),
-        ["user-1", PARTY_STATUS_OPEN, APPLICATION_STATUS_WITHDRAWN, APPLICATION_STATUS_ACCEPTED]
+        ["user-1", PartyStatus.Open, ApplicationStatus.Withdrawn, ApplicationStatus.Accepted]
       )
     })
 
@@ -134,7 +130,7 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining(`UPDATE "Application"`),
-        ["user-1", PARTY_STATUS_OPEN, APPLICATION_STATUS_WITHDRAWN, APPLICATION_STATUS_ACCEPTED]
+        ["user-1", PartyStatus.Open, ApplicationStatus.Withdrawn, ApplicationStatus.Accepted]
       )
     })
 

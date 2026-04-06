@@ -1,14 +1,9 @@
 import type { WebSocket } from "ws"
-import { parseInbound, type OutboundMessage } from "./types.js"
+import { parseInbound, type OutboundMessage, PartyStatus, ApplicationStatus } from "./types.js"
 import { registry } from "./registry.js"
 import { writePresenceOnline, writePresenceOffline } from "./presence.js"
 import { displaceAndRegisterRsn } from "./rsn.js"
 import { pool } from "./db.js"
-import {
-  PARTY_STATUS_OPEN,
-  APPLICATION_STATUS_ACCEPTED,
-  APPLICATION_STATUS_WITHDRAWN,
-} from "./db-enums.js"
 
 interface PendingCommandRow {
   readonly id: string
@@ -86,7 +81,7 @@ const handlePartyStateLeft = async (userId: string): Promise<void> => {
      DELETE FROM "PartyMember"
      WHERE "userId" = $1
        AND "partyId" IN (SELECT "partyId" FROM matched_member)`,
-    [userId, PARTY_STATUS_OPEN, APPLICATION_STATUS_WITHDRAWN, APPLICATION_STATUS_ACCEPTED]
+    [userId, PartyStatus.Open, ApplicationStatus.Withdrawn, ApplicationStatus.Accepted]
   )
 }
 

@@ -1,11 +1,6 @@
 import type { PoolClient } from "pg"
 import { pool } from "./db.js"
-import {
-  PARTY_STATUS_OPEN,
-  APPLICATION_STATUS_PENDING,
-  APPLICATION_STATUS_ACCEPTED,
-  APPLICATION_STATUS_WITHDRAWN,
-} from "./db-enums.js"
+import { PartyStatus, ApplicationStatus } from "./types.js"
 
 const RSN_SOURCE_PLUGIN = "PLUGIN"
 
@@ -59,14 +54,14 @@ const cleanupDisplacedOwner = async (
 
   await client.query(
     `UPDATE "Application" SET status = $2 WHERE "rsnId" = $1 AND status = $3`,
-    [rsnId, APPLICATION_STATUS_WITHDRAWN, APPLICATION_STATUS_PENDING]
+    [rsnId, ApplicationStatus.Withdrawn, ApplicationStatus.Pending]
   )
 
   const accepted = await client.query<AcceptedPartyRow>(
     `SELECT a."partyId" FROM "Application" a
      JOIN "Party" p ON p.id = a."partyId"
      WHERE a."rsnId" = $1 AND a.status = $2 AND p.status = $3`,
-    [rsnId, APPLICATION_STATUS_ACCEPTED, PARTY_STATUS_OPEN]
+    [rsnId, ApplicationStatus.Accepted, PartyStatus.Open]
   )
 
   for (const row of accepted.rows) {
