@@ -46,10 +46,24 @@ const handleAck = async (userId: string, commandId: string): Promise<void> => {
 
 const handlePartyStateLeft = async (userId: string): Promise<void> => {
   await pool.query(
-    `DELETE FROM "PartyMember" WHERE "userId" = $1
-     AND "partyId" IN (
-       SELECT id FROM "Party" WHERE status IN ('OPEN', 'STARTED')
-     )`,
+    `WITH matched_member AS (
+       SELECT pm."partyId"
+       FROM "PartyMember" pm
+       JOIN "Party" p ON p.id = pm."partyId"
+       WHERE pm."userId" = $1
+         AND p.status = 'OPEN'
+       LIMIT 1
+     ),
+     updated_app AS (
+       UPDATE "Application"
+       SET status = 'WITHDRAWN'
+       WHERE "userId" = $1
+         AND "partyId" IN (SELECT "partyId" FROM matched_member)
+         AND status = 'ACCEPTED'
+     )
+     DELETE FROM "PartyMember"
+     WHERE "userId" = $1
+       AND "partyId" IN (SELECT "partyId" FROM matched_member)`,
     [userId]
   )
 }
