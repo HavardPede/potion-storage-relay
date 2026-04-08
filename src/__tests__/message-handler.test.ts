@@ -74,7 +74,7 @@ describe("handleMessage", () => {
       const ws = createMockWs()
       mockQuery.mockResolvedValueOnce(
         queryResult([
-          { id: "cmd-1", type: "JOIN_PARTY", passphrase: "abc", partyId: "p-1", reason: null },
+          { id: "cmd-1", type: "JOIN_PARTY", passphrase: "abc", partyId: "p-1", reason: null, role: "tank" },
         ])
       )
 
@@ -88,6 +88,7 @@ describe("handleMessage", () => {
           passphrase: "abc",
           partyId: "p-1",
           reason: null,
+          role: "tank",
         })
       )
     })
@@ -106,8 +107,37 @@ describe("handleMessage", () => {
   })
 
   describe("PARTY_STATE", () => {
-    it("deletes PartyMember scoped to OPEN parties on LEFT", async () => {
+    it("closes party when leader leaves", async () => {
       const ws = createMockWs()
+      mockQuery.mockResolvedValueOnce(
+        queryResult([{ partyId: "p-1", isLeader: true }])
+      )
+
+      await handleMessage(
+        ws,
+        "user-1",
+        JSON.stringify({ type: "PARTY_STATE", state: "LEFT", passphrase: null })
+      )
+
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE "Party" SET status'),
+        [
+          "p-1",
+          PartyStatus.Closed,
+          PartyStatus.Open,
+          ApplicationStatus.Withdrawn,
+          ApplicationStatus.Pending,
+          ApplicationStatus.Accepted,
+        ]
+      )
+    })
+
+    it("removes member and withdraws application when non-leader leaves", async () => {
+      const ws = createMockWs()
+      mockQuery.mockResolvedValueOnce(
+        queryResult([{ partyId: "p-1", isLeader: false }])
+      )
+
       await handleMessage(
         ws,
         "user-1",
@@ -116,36 +146,21 @@ describe("handleMessage", () => {
 
       expect(mockQuery).toHaveBeenCalledWith(
         expect.stringContaining('DELETE FROM "PartyMember"'),
-        ["user-1", PartyStatus.Open, ApplicationStatus.Withdrawn, ApplicationStatus.Accepted]
+        ["user-1", "p-1", ApplicationStatus.Withdrawn, ApplicationStatus.Accepted]
       )
     })
 
-    it("updates application status to WITHDRAWN on LEFT", async () => {
+    it("does nothing when user has no open party", async () => {
       const ws = createMockWs()
+      mockQuery.mockResolvedValueOnce(queryResult([]))
+
       await handleMessage(
         ws,
         "user-1",
         JSON.stringify({ type: "PARTY_STATE", state: "LEFT", passphrase: null })
       )
 
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining(`UPDATE "Application"`),
-        ["user-1", PartyStatus.Open, ApplicationStatus.Withdrawn, ApplicationStatus.Accepted]
-      )
-    })
-
-    it("does not affect STARTED parties on LEFT", async () => {
-      const ws = createMockWs()
-      await handleMessage(
-        ws,
-        "user-1",
-        JSON.stringify({ type: "PARTY_STATE", state: "LEFT", passphrase: null })
-      )
-
-      expect(mockQuery).toHaveBeenCalledWith(
-        expect.not.stringContaining("'STARTED'"),
-        expect.any(Array)
-      )
+      expect(mockQuery).toHaveBeenCalledTimes(1)
     })
 
     it("does nothing on JOINED", async () => {

@@ -1,5 +1,6 @@
 export enum PartyStatus {
   Open = "OPEN",
+  Closed = "CLOSED",
 }
 
 export enum ApplicationStatus {
@@ -59,10 +60,11 @@ interface AuthErrorMessage {
 interface CommandMessage {
   readonly type: "COMMAND"
   readonly id: string
-  readonly command: "JOIN_PARTY" | "LEAVE_PARTY"
+  readonly command: "JOIN_PARTY" | "LEAVE_PARTY" | "ROLE_CHANGE"
   readonly passphrase: string | null
   readonly partyId: string | null
   readonly reason: string | null
+  readonly role: string | null
 }
 
 interface ErrorMessage {
