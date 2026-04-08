@@ -7,6 +7,7 @@ import { handleMessage } from "./message-handler.js"
 import { writePresenceOffline } from "./presence.js"
 import { startCommandListener } from "./command-listener.js"
 import { parseInbound } from "./types.js"
+import { log } from "./log.js"
 
 const PORT = parseInt(process.env.PORT ?? "8080", 10)
 const AUTH_TIMEOUT_MS = 5_000
@@ -60,13 +61,13 @@ wss.on("connection", (ws) => {
   })
 
   ws.on("close", () => handleDisconnect(ws, session.userId))
-  ws.on("error", (err) => console.error("[ws] error:", err))
+  ws.on("error", (err) => log.error("[ws] error:", err))
 })
 
 startCommandListener()
 
 server.listen(PORT, () => {
-  console.log(`[relay] listening on port ${PORT}`)
+  log.info(`[relay] listening on port ${PORT}`)
 })
 
 type Session = { authenticated: boolean; userId: string | null }
@@ -76,8 +77,10 @@ const activateSession = (ws: WebSocket, session: Session, userId: string): void 
   session.userId = userId
   registry.add(userId, ws)
   ws.on("message", (d) => {
-    handleMessage(ws, userId, d.toString()).catch((err: unknown) => {
-      console.error("[ws] message handler error:", err)
+    const raw = d.toString()
+    log.debug(`[ws] inbound userId=${userId}:`, raw)
+    handleMessage(ws, userId, raw).catch((err: unknown) => {
+      log.error("[ws] message handler error:", err)
     })
   })
 }
@@ -86,16 +89,16 @@ const handlePairMessage = async (ws: WebSocket, code: string, session: Session):
   try {
     const result = await issueTokenFromPairingCode(code)
     if (!result) {
-      console.log("[pair] failed: invalid or expired code")
+      log.info("[pair] failed: invalid or expired code")
       ws.send(JSON.stringify({ type: "PAIR_ERROR", reason: PAIR_ERROR_INVALID_CODE }))
       ws.close(WS_CLOSE_AUTH_REQUIRED, "Invalid pairing code")
       return
     }
     activateSession(ws, session, result.userId)
     ws.send(JSON.stringify({ type: "PAIR_OK", token: result.token }))
-    console.log(`[pair] success: userId=${result.userId}, connections=${registry.size()}`)
+    log.info(`[pair] success: userId=${result.userId}, connections=${registry.size()}`)
   } catch (err) {
-    console.error("[pair] error:", err)
+    log.error("[pair] error:", err)
     ws.send(JSON.stringify({ type: "PAIR_ERROR", reason: PAIR_ERROR_INTERNAL }))
     ws.close(WS_CLOSE_INTERNAL_ERROR, "Internal error")
   }
@@ -110,7 +113,7 @@ const handleAuthMessage = async (ws: WebSocket, token: string, session: Session)
   }
   activateSession(ws, session, userId)
   ws.send(JSON.stringify({ type: "AUTH_OK" }))
-  console.log(`[ws] authenticated: userId=${userId}, connections=${registry.size()}`)
+  log.info(`[ws] authenticated: userId=${userId}, connections=${registry.size()}`)
 }
 
 const handleFirstMessage = async (ws: WebSocket, session: Session, raw: string): Promise<void> => {
@@ -131,10 +134,10 @@ const handleDisconnect = (ws: WebSocket, userId: string | null): void => {
   const conn = registry.remove(ws)
   if (conn?.rsn) {
     writePresenceOffline(conn.userId, conn.rsn).catch((err: unknown) => {
-      console.error("[presence] offline write error:", err)
+      log.error("[presence] offline write error:", err)
     })
   }
   if (userId) {
-    console.log(`[ws] disconnected: userId=${userId}, connections=${registry.size()}`)
+    log.info(`[ws] disconnected: userId=${userId}, connections=${registry.size()}`)
   }
 }

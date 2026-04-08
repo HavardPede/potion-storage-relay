@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg"
 import { pool } from "./db.js"
 import { PartyStatus, ApplicationStatus } from "./types.js"
+import { log } from "./log.js"
 
 const RSN_SOURCE_PLUGIN = "PLUGIN"
 
@@ -50,7 +51,7 @@ const cleanupDisplacedOwner = async (
   rsnId: string,
   displacedUserId: string
 ): Promise<void> => {
-  console.warn(`[rsn] displaced: rsnId=${rsnId}, fromUserId=${displacedUserId}`)
+  log.info(`[rsn] displaced: rsnId=${rsnId}, fromUserId=${displacedUserId}`)
 
   await client.query(
     `UPDATE "Application" SET status = $2 WHERE "rsnId" = $1 AND status = $3`,

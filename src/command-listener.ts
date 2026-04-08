@@ -1,6 +1,7 @@
 import pg from "pg"
 import { registry } from "./registry.js"
 import type { OutboundMessage } from "./types.js"
+import { log } from "./log.js"
 
 const RECONNECT_DELAY_MS = 5_000
 const PG_NOTIFY_CHANNEL = "plugin_command"
@@ -8,10 +9,11 @@ const PG_NOTIFY_CHANNEL = "plugin_command"
 interface CommandNotificationPayload {
   readonly id: string
   readonly userId: string
-  readonly type: "JOIN_PARTY" | "LEAVE_PARTY"
+  readonly type: "JOIN_PARTY" | "LEAVE_PARTY" | "ROLE_CHANGE"
   readonly passphrase: string | null
   readonly partyId: string | null
   readonly reason: string | null
+  readonly role: string | null
   readonly rsn: string | null
 }
 
@@ -30,16 +32,17 @@ const routeCommand = (payload: CommandNotificationPayload): void => {
     passphrase: payload.passphrase,
     partyId: payload.partyId,
     reason: payload.reason,
+    role: payload.role,
   }
   const serialized = JSON.stringify(message)
-  console.log(
+  log.info(
     `[command] routing: userId=${payload.userId}, rsn=${payload.rsn}, targets=${connections.length}, commandId=${message.id}`
   )
   for (const ws of connections) {
     try {
       ws.send(serialized)
     } catch (err) {
-      console.error("[command] send failed:", err)
+      log.error("[command] send failed:", err)
     }
   }
 }
@@ -48,7 +51,7 @@ const listen = async (): Promise<void> => {
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL })
 
   client.on("error", (err) => {
-    console.error("[pg-listen] connection error:", err)
+    log.error("[pg-listen] connection error:", err)
     scheduleReconnect()
   })
 
@@ -57,25 +60,25 @@ const listen = async (): Promise<void> => {
     try {
       const parsed: unknown = JSON.parse(msg.payload)
       if (!isCommandPayload(parsed)) {
-        console.error("[pg-listen] invalid notification payload:", parsed)
+        log.error("[pg-listen] invalid notification payload:", parsed)
         return
       }
       routeCommand(parsed)
     } catch (err) {
-      console.error("[pg-listen] failed to parse notification:", err)
+      log.error("[pg-listen] failed to parse notification:", err)
     }
   })
 
   await client.connect()
   await client.query(`LISTEN ${PG_NOTIFY_CHANNEL}`)
-  console.log(`[pg-listen] listening for ${PG_NOTIFY_CHANNEL} notifications`)
+  log.info(`[pg-listen] listening for ${PG_NOTIFY_CHANNEL} notifications`)
 }
 
 const scheduleReconnect = (): void => {
-  console.log(`[pg-listen] reconnecting in ${RECONNECT_DELAY_MS}ms`)
+  log.info(`[pg-listen] reconnecting in ${RECONNECT_DELAY_MS}ms`)
   setTimeout(() => {
     listen().catch((err) => {
-      console.error("[pg-listen] reconnect failed:", err)
+      log.error("[pg-listen] reconnect failed:", err)
       scheduleReconnect()
     })
   }, RECONNECT_DELAY_MS)
@@ -83,7 +86,7 @@ const scheduleReconnect = (): void => {
 
 export const startCommandListener = (): void => {
   listen().catch((err) => {
-    console.error("[pg-listen] initial connect failed:", err)
+    log.error("[pg-listen] initial connect failed:", err)
     scheduleReconnect()
   })
 }
