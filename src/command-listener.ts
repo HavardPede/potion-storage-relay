@@ -1,9 +1,8 @@
-import pg from "pg"
 import { registry } from "./registry.js"
 import type { OutboundMessage } from "./types.js"
+import { startPgListener } from "./pg-listen.js"
 import { log } from "./log.js"
 
-const RECONNECT_DELAY_MS = 5_000
 const PG_NOTIFY_CHANNEL = "plugin_command"
 
 interface CommandNotificationPayload {
@@ -23,7 +22,7 @@ const isCommandPayload = (value: unknown): value is CommandNotificationPayload =
   return typeof v.id === "string" && typeof v.userId === "string"
 }
 
-const routeCommand = (payload: CommandNotificationPayload): void => {
+export const routeCommand = (payload: CommandNotificationPayload): void => {
   const connections = registry.getByUserAndRsn(payload.userId, payload.rsn)
   const message: OutboundMessage = {
     type: "COMMAND",
@@ -47,46 +46,20 @@ const routeCommand = (payload: CommandNotificationPayload): void => {
   }
 }
 
-const listen = async (): Promise<void> => {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL })
-
-  client.on("error", (err) => {
-    log.error("[pg-listen] connection error:", err)
-    scheduleReconnect()
-  })
-
-  client.on("notification", (msg) => {
-    if (msg.channel !== PG_NOTIFY_CHANNEL || !msg.payload) return
-    try {
-      const parsed: unknown = JSON.parse(msg.payload)
-      if (!isCommandPayload(parsed)) {
-        log.error("[pg-listen] invalid notification payload:", parsed)
-        return
-      }
-      routeCommand(parsed)
-    } catch (err) {
-      log.error("[pg-listen] failed to parse notification:", err)
+const handleNotification = (channel: string, payload: string): void => {
+  if (channel !== PG_NOTIFY_CHANNEL) return
+  try {
+    const parsed: unknown = JSON.parse(payload)
+    if (!isCommandPayload(parsed)) {
+      log.error("[command] invalid notification payload:", parsed)
+      return
     }
-  })
-
-  await client.connect()
-  await client.query(`LISTEN ${PG_NOTIFY_CHANNEL}`)
-  log.info(`[pg-listen] listening for ${PG_NOTIFY_CHANNEL} notifications`)
-}
-
-const scheduleReconnect = (): void => {
-  log.info(`[pg-listen] reconnecting in ${RECONNECT_DELAY_MS}ms`)
-  setTimeout(() => {
-    listen().catch((err) => {
-      log.error("[pg-listen] reconnect failed:", err)
-      scheduleReconnect()
-    })
-  }, RECONNECT_DELAY_MS)
+    routeCommand(parsed)
+  } catch (err) {
+    log.error("[command] failed to parse notification:", err)
+  }
 }
 
 export const startCommandListener = (): void => {
-  listen().catch((err) => {
-    log.error("[pg-listen] initial connect failed:", err)
-    scheduleReconnect()
-  })
+  startPgListener([PG_NOTIFY_CHANNEL], handleNotification)
 }
