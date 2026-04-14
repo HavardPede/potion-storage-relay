@@ -5,6 +5,7 @@ import { validateToken, issueTokenFromPairingCode } from "./auth.js"
 import { registry } from "./registry.js"
 import { handleMessage } from "./message-handler.js"
 import { writePresenceOffline } from "./presence.js"
+import { broadcastUserEvent } from "./broadcast.js"
 import { startCommandListener } from "./command-listener.js"
 import { parseInbound } from "./types.js"
 import { log } from "./log.js"
@@ -96,6 +97,7 @@ const handlePairMessage = async (ws: WebSocket, code: string, session: Session):
     }
     activateSession(ws, session, result.userId)
     ws.send(JSON.stringify({ type: "PAIR_OK", token: result.token }))
+    await broadcastUserEvent(result.userId, "device_linked")
     log.info(`[pair] success: userId=${result.userId}, connections=${registry.size()}`)
   } catch (err) {
     log.error("[pair] error:", err)

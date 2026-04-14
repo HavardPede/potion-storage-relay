@@ -5,6 +5,7 @@ import { registry } from "../registry.js"
 import { pool } from "../db.js"
 import { writePresenceOnline, writePresenceOffline } from "../presence.js"
 import { displaceAndRegisterRsn } from "../rsn.js"
+import { broadcastUserEvent } from "../broadcast.js"
 import { PartyStatus, ApplicationStatus } from "../types.js"
 
 vi.mock("../db.js", () => ({
@@ -27,12 +28,17 @@ vi.mock("../rsn.js", () => ({
   displaceAndRegisterRsn: vi.fn(),
 }))
 
+vi.mock("../broadcast.js", () => ({
+  broadcastUserEvent: vi.fn().mockResolvedValue(undefined),
+}))
+
 const mockQuery = vi.mocked(pool.query)
 const mockUpdateRsn = vi.mocked(registry.updateRsn)
 const mockGetConnectionByWs = vi.mocked(registry.getConnectionByWs)
 const mockWritePresenceOnline = vi.mocked(writePresenceOnline)
 const mockWritePresenceOffline = vi.mocked(writePresenceOffline)
 const mockDisplaceAndRegisterRsn = vi.mocked(displaceAndRegisterRsn)
+const mockBroadcastUserEvent = vi.mocked(broadcastUserEvent)
 
 const queryResult = <T>(rows: T[]): QueryResult<T> => ({
   rows,
@@ -68,6 +74,13 @@ describe("handleMessage", () => {
       await handleMessage(ws, "user-1", JSON.stringify({ type: "IDENTIFY", rsn: "PlayerOne" }))
 
       expect(mockWritePresenceOnline).toHaveBeenCalledWith("user-1", "PlayerOne")
+    })
+
+    it("broadcasts rsn_linked event after registration", async () => {
+      const ws = createMockWs()
+      await handleMessage(ws, "user-1", JSON.stringify({ type: "IDENTIFY", rsn: "PlayerOne" }))
+
+      expect(mockBroadcastUserEvent).toHaveBeenCalledWith("user-1", "rsn_linked", { rsn: "PlayerOne" })
     })
 
     it("re-delivers unacked commands", async () => {

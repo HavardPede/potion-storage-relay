@@ -3,6 +3,7 @@ import { parseInbound, type OutboundMessage, PartyStatus, ApplicationStatus } fr
 import { registry } from "./registry.js"
 import { writePresenceOnline, writePresenceOffline } from "./presence.js"
 import { displaceAndRegisterRsn } from "./rsn.js"
+import { broadcastUserEvent } from "./broadcast.js"
 import { pool } from "./db.js"
 import { log } from "./log.js"
 
@@ -53,6 +54,7 @@ const handleIdentify = async (ws: WebSocket, userId: string, rsn: string): Promi
   log.info(`[identify] userId=${userId}, rsn=${rsn}`)
   registry.updateRsn(ws, rsn)
   await displaceAndRegisterRsn(userId, rsn)
+  await broadcastUserEvent(userId, "rsn_linked", { rsn })
   await writePresenceOnline(userId, rsn)
   await deliverPendingCommands(ws, userId, rsn)
 }
